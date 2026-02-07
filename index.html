@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>University Timetable (IT)</title>
+  <title>University Timetable Maker (Timeline)</title>
 
   <style>
     :root{
@@ -264,7 +264,25 @@
       .block{ border-color:#000 !important; background:#fff !important; color:#000 !important; }
       .block .s, .smallText{ color:#000 !important; }
     }
-  </style>
+  
+    /* Viewer layout: use full width, no left column gap */
+    body.viewerMode .wrap{max-width:100%; padding:12px 14px}
+    body.viewerMode .layout{grid-template-columns:1fr}
+    body.viewerMode .layout > section{min-width:0}
+
+    /* Header controls */
+    .topControls{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end}
+    .topControls select{height:36px; padding:6px 10px; border-radius:12px; border:1px solid rgba(42,55,102,0.9);
+      background:rgba(12,18,40,0.85); color:var(--text); outline:none}
+    .topControls label{font-size:12px; color:var(--muted)}
+    .topGroup{display:flex; gap:6px; align-items:center}
+
+    @media (max-width:900px){
+      .layout{grid-template-columns:1fr}
+      header .row{align-items:flex-start}
+    }
+
+</style>
 </head>
 
 <body>
@@ -275,8 +293,22 @@
         <h1>University Timetable Maker (Timeline)</h1>
         <span class="pill">Click class to load editor, overlaps are stacked</span>
       </div>
-      <div class="row" style="gap:8px">
+      <div class="row topControls" style="gap:8px">
         <span class="pill" id="authPill">Mode: Viewer</span>
+        <div class="topGroup">
+          <label for="rowModeTop">Rows</label>
+          <select id="rowModeTop">
+            <option value="room" selected>Rooms</option>
+            <option value="section">Sections</option>
+            <option value="instructor">Instructors</option>
+          </select>
+        </div>
+        <div class="topGroup">
+          <label for="rowFilterTop">Only</label>
+          <select id="rowFilterTop">
+            <option value="__all__" selected>All</option>
+          </select>
+        </div>
 <button id="loginBtn" style="width:auto;padding:8px 10px;border-radius:12px">Admin login</button>
 <button id="logoutBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Logout</button>
 <button id="cloudSaveBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Save to Cloud</button>
@@ -493,6 +525,7 @@ function hasPlaceholders(cfg){
 
   let classes = [];
   let rowMode = "room";
+  let rowFilter = "__all__";
   let selectedId = "";
 
   const defaultsByMode = {
@@ -509,7 +542,7 @@ function hasPlaceholders(cfg){
   const courseEl=$("course"), sectionEl=$("section"), instructorEl=$("instructor"),
         roomEl=$("room"), dayEl=$("day"), startEl=$("start"), durEl=$("dur"),
         notesEl=$("notes"), msgEl=$("msg"), gridRoot=$("gridRoot"),
-        rowModeEl=$("rowMode"), rowListEl=$("rowList"), gridSubEl=$("gridSub"),
+        rowModeEl=$("rowMode"), rowModeTopEl=$("rowModeTop"), rowFilterTopEl=$("rowFilterTop"), rowListEl=$("rowList"), gridSubEl=$("gridSub"),
         confStatEl=$("confStat"), dayStartEl=$("dayStart"), dayEndEl=$("dayEnd"),
         slotSizeEl=$("slotSize"), selInfoEl=$("selInfo");
 
@@ -816,6 +849,10 @@ function setAdminMode(state, userEmail){
   // Hide the whole editor panel for viewers
   $("editorCard").classList.toggle("hidden", !isAdmin);
 
+  // Keep top view controls in sync
+  const rmTop = $("rowModeTop");
+  if(rmTop) rmTop.value = rowMode;
+
   // For viewers, ensure nothing can be dragged/dropped/edited
   document.body.classList.toggle("viewerMode", !isAdmin);
 }
@@ -849,7 +886,8 @@ async function initFirebase(){
   function render(){
     hideMsg();
 
-    const rows = getRowsForMode(rowMode);
+    const allRows = getRowsForMode(rowMode);
+    const rows = (rowFilter && rowFilter !== "__all__") ? [rowFilter] : allRows;
     const slots = timeSlots();
     const gridTemplate = `140px repeat(${slots.length}, minmax(86px, 1fr))`;
 
@@ -861,7 +899,27 @@ async function initFirebase(){
 
     const modeLabel = rowMode === "room" ? "Rooms" : (rowMode === "section" ? "Sections" : "Instructors");
     gridSubEl.textContent = `Rows: ${modeLabel}`;
-    rowListEl.value = rows.join(", ");
+    rowListEl.value = allRows.join(", ");
+
+    // Sync top controls
+    if (rowModeTopEl) rowModeTopEl.value = rowMode;
+    if (rowFilterTopEl) {
+      const prev = rowFilter;
+      rowFilterTopEl.innerHTML = "";
+      const optAll = document.createElement("option");
+      optAll.value = "__all__";
+      optAll.textContent = "All";
+      rowFilterTopEl.appendChild(optAll);
+      for (const k of allRows) {
+        const o = document.createElement("option");
+        o.value = k;
+        o.textContent = k;
+        rowFilterTopEl.appendChild(o);
+      }
+      // restore previous if still valid
+      if (prev && (prev === "__all__" || allRows.includes(prev))) rowFilter = prev;
+      rowFilterTopEl.value = rowFilter;
+    }
 
     gridRoot.innerHTML = "";
 
@@ -1141,6 +1199,22 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ cloudLoadPayload().catch(()=>s
     render();
     queueAutoSave();
   });
+
+  if(rowModeTopEl){
+    rowModeTopEl.addEventListener("change", ()=>{
+      rowMode = rowModeTopEl.value;
+      rowFilter = "__all__";
+      if(rowModeEl) rowModeEl.value = rowMode;
+      render();
+      queueAutoSave();
+    });
+  }
+  if(rowFilterTopEl){
+    rowFilterTopEl.addEventListener("change", ()=>{
+      rowFilter = rowFilterTopEl.value || "__all__";
+      render();
+    });
+  }
 
   slotSizeEl.addEventListener("change", ()=>{
     slotSize = Number(slotSizeEl.value);
