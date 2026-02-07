@@ -301,6 +301,7 @@
             <option value="room" selected>Rooms</option>
             <option value="section">Sections</option>
             <option value="instructor">Instructors</option>
+            <option value="course" data-admin-only="1">Courses</option>
           </select>
         </div>
         <div class="topGroup">
@@ -389,6 +390,7 @@
               <option value="room" selected>Rooms</option>
               <option value="section">Sections (2A, 2B, etc.)</option>
               <option value="instructor">Instructors</option>
+              <option value="course" data-admin-only="1">Courses</option>
             </select>
           </div>
           <div class="tiny">
@@ -531,9 +533,10 @@ function hasPlaceholders(cfg){
   const defaultsByMode = {
     room: ["294","296","IT Lab 1","IT Lab 2","HW Lab"],
     section: ["2A","2B","3A","3B","4A","4B"],
-    instructor: []
+    instructor: [],
+    course: []
   };
-  const userRowsByMode = { room: null, section: null, instructor: null };
+  const userRowsByMode = { room: null, section: null, instructor: null, course: null };
 
   let startMin = 8*60+30;
   let endMin = 17*60+30;
@@ -603,6 +606,7 @@ function hasPlaceholders(cfg){
   function keyFieldForMode(mode){
     if(mode === "room") return "room";
     if(mode === "section") return "section";
+    if(mode === "course") return "course";
     return "instructor";
   }
 
@@ -848,6 +852,17 @@ function setAdminMode(state, userEmail){
 
   // Hide the whole editor panel for viewers
   $("editorCard").classList.toggle("hidden", !isAdmin);
+
+  // Admin-only view option(s)
+  [rowModeEl, rowModeTopEl].forEach(sel => {
+    if(!sel) return;
+    Array.from(sel.options).forEach(o => {
+      if(o.dataset && o.dataset.adminOnly === "1") o.hidden = !isAdmin;
+    });
+  });
+  if(!isAdmin && rowMode === "course"){
+    rowMode = "room";
+  }
 
   // Keep top view controls in sync
   const rmTop = $("rowModeTop");
