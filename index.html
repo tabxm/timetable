@@ -1218,14 +1218,23 @@ async function initFirebase(){
         laneInner.style.pointerEvents = "none";
         lane.appendChild(laneInner);
 
-        /* More vertical space per overlap level so nothing is cut */
-        const base = 140;
-        const perLevel = 170;
-        const targetH = Math.max(base, perLevel * levelCount);
-        lane.style.minHeight = `${targetH}px`;
-        dayLabel.style.minHeight = `${targetH}px`;
+        /* More vertical space per overlap level so nothing is cut.
+           If a lane has no classes, keep it compact (like only the day label). */
+        const hasItems = placed.length > 0;
+        if(!hasItems){
+          const compactH = 56; // compact row height when empty
+          lane.style.minHeight = `${compactH}px`;
+          dayLabel.style.minHeight = `${compactH}px`;
+          laneInner.style.inset = "8px";
+        } else {
+          const base = 140;
+          const perLevel = 170;
+          const targetH = Math.max(base, perLevel * levelCount);
+          lane.style.minHeight = `${targetH}px`;
+          dayLabel.style.minHeight = `${targetH}px`;
+        }
 
-        for(const p of placed){
+for(const p of placed){
           const c = p.c;
 
           const block = document.createElement("div");
