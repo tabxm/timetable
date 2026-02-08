@@ -176,6 +176,15 @@
     }
     .block.selected{outline:2px solid rgba(255,204,0,0.65)}
 
+    .block.added{
+      border-color:rgba(67,209,158,0.95);
+      background:linear-gradient(180deg,rgba(67,209,158,0.18),rgba(29,42,87,0.35));
+    }
+    .block.updated{
+      border-color:rgba(255,204,0,0.95);
+      background:linear-gradient(180deg,rgba(255,204,0,0.16),rgba(29,42,87,0.35));
+    }
+
     .block .t{
       font-size:12px;color:#e9eefc;font-weight:850;line-height:1.2;
       white-space:normal;
@@ -312,7 +321,9 @@
         </div>
 <button id="loginBtn" style="width:auto;padding:8px 10px;border-radius:12px">Admin login</button>
 <button id="logoutBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Logout</button>
-<button id="cloudSaveBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Save to Cloud</button>
+<span class="pill" id="verPill">v1</span>
+<button id="draftSaveBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Save draft</button>
+<button id="publishBtn" class="hidden btnPrimary" style="width:auto;padding:8px 10px;border-radius:12px">Publish</button>
 <button id="cloudLoadBtn" style="width:auto;padding:8px 10px;border-radius:12px">Reload</button>
         <span class="pill" id="confStat">Conflicts: 0</span>
         <button id="confBtn" style="width:auto;padding:8px 10px;border-radius:12px">View conflicts</button>
@@ -783,7 +794,7 @@ function hasPlaceholders(cfg){
   }
 
   function makePayload(){
-    return { version:1, rowMode, rowsByMode: userRowsByMode, startMin, endMin, slotSize, classes };
+    return { version:2, rowMode, rowsByMode: userRowsByMode, startMin, endMin, slotSize, classes };
   }
 
 
@@ -811,35 +822,179 @@ function applyPayload(payload){
   render();
 }
 
+
 function queueAutoSave(){
   if(!firebaseReady || !isAdmin) return;
   if(autoSaveTimer) clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(()=>{ cloudSavePayload().catch(()=>{}); }, AUTO_SAVE_MS);
+  autoSaveTimer = setTimeout(()=>{ cloudSaveDraftPayload().catch(()=>{}); }, AUTO_SAVE_MS);
 }
 
-async function cloudSavePayload(){
+/* Firestore doc schema (single doc):
+   - publishedData: stringified payload
+   - publishedVersion: number
+   - publishedAt: timestamp
+   - diffMap: { [classId]: { type: "added"|"updated", fields?: string[] } }
+   - deleted: [{ id, course, section, instructor, room, day, start, dur }]
+   - draftData: stringified payload
+   - draftUpdatedAt: timestamp
+   Backward compatibility: if "data" exists, it is treated as publishedData.
+*/
+
+function normalizeDocData(docData){
+  const publishedData = docData.publishedData || docData.data || null;
+  const publishedVersion = Number(docData.publishedVersion || 1);
+  const diffMap = docData.diffMap && typeof docData.diffMap === "object" ? docData.diffMap : {};
+  const deleted = Array.isArray(docData.deleted) ? docData.deleted : [];
+  const draftData = docData.draftData || null;
+  return { publishedData, publishedVersion, diffMap, deleted, draftData };
+}
+
+function diffPayload(prevPayload, nextPayload){
+  const prev = new Map((prevPayload?.classes || []).map(c=>[c.id, c]));
+  const next = new Map((nextPayload?.classes || []).map(c=>[c.id, c]));
+
+  const diffMap = {};
+  const deleted = [];
+
+  for (const [id, cNext] of next.entries()){
+    const cPrev = prev.get(id);
+    if(!cPrev){
+      diffMap[id] = { type:"added" };
+      continue;
+    }
+    const fields = [];
+    for (const k of ["course","section","instructor","room","day","start","dur","notes"]){
+      const a = (cPrev[k] ?? "");
+      const b = (cNext[k] ?? "");
+      if (String(a) !== String(b)) fields.push(k);
+    }
+    if(fields.length){
+      diffMap[id] = { type:"updated", fields };
+    }
+  }
+
+  for (const [id, cPrev] of prev.entries()){
+    if(!next.has(id)){
+      deleted.push({
+        id: cPrev.id,
+        course: cPrev.course || "",
+        section: cPrev.section || "",
+        instructor: cPrev.instructor || "",
+        room: cPrev.room || "",
+        day: cPrev.day || "",
+        start: cPrev.start || "",
+        dur: Number(cPrev.dur || 0)
+      });
+    }
+  }
+  return { diffMap, deleted };
+}
+
+let publishedVersion = 1;
+let changeMap = {};
+let deletedChanges = [];
+
+function updateVersionUI(){
+  const vEl = $("verPill");
+  if(vEl) vEl.textContent = `v${publishedVersion}`;
+}
+
+async function cloudSaveDraftPayload(){
   if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
   if(!isAdmin) { showMsg("View-only. Admin login required to save.", "warn"); return; }
 
   const payload = makePayload();
   const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
-  await docRef.set({ data: JSON.stringify(payload), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
-  showMsg("Saved to cloud.", "ok");
+  await docRef.set({
+    draftData: JSON.stringify(payload),
+    draftUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true });
+  showMsg("Draft saved.", "ok");
 }
 
-async function cloudLoadPayload(){
+async function cloudPublishDraft(){
+  if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  if(!isAdmin) { showMsg("View-only. Admin login required to publish.", "warn"); return; }
+
+  const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
+  const snap = await docRef.get();
+  const docData = snap.exists ? snap.data() : {};
+  const norm = normalizeDocData(docData);
+
+  const prevPublished = norm.publishedData ? JSON.parse(norm.publishedData) : { classes: [] };
+  const nextPublished = makePayload();
+
+  const { diffMap, deleted } = diffPayload(prevPublished, nextPublished);
+  const nextVersion = (Number(norm.publishedVersion || 1) || 1) + 1;
+
+  await docRef.set({
+    publishedData: JSON.stringify(nextPublished),
+    publishedVersion: nextVersion,
+    publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    diffMap,
+    deleted,
+    // keep draft as-is (optional). If you prefer clearing draft after publish, set draftData:null.
+  }, { merge:true });
+
+  publishedVersion = nextVersion;
+  changeMap = diffMap;
+  deletedChanges = deleted;
+  updateVersionUI();
+
+  showMsg(`Published v${nextVersion}.`, "ok");
+}
+
+async function cloudLoadPublished(){
   if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
   const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
   const snap = await docRef.get();
   if(!snap.exists){
-    showMsg("No cloud timetable found yet. Admin can create and Save to Cloud.", "warn");
+    showMsg("No published timetable found yet. Admin can create a draft and Publish.", "warn");
     return;
   }
-  const dataStr = snap.data().data || "{}";
-  const payload = JSON.parse(dataStr);
+  const norm = normalizeDocData(snap.data());
+  if(!norm.publishedData){
+    showMsg("No published timetable found yet. Admin can create a draft and Publish.", "warn");
+    return;
+  }
+  const payload = JSON.parse(norm.publishedData);
+
+  publishedVersion = norm.publishedVersion;
+  changeMap = norm.diffMap || {};
+  deletedChanges = norm.deleted || [];
+  updateVersionUI();
+
   applyPayload(payload);
-  showMsg("Loaded from cloud.", "ok");
+
+  showMsg(`Loaded published v${publishedVersion}.`, "ok");
 }
+
+async function cloudLoadDraftOrPublished(){
+  if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
+  const snap = await docRef.get();
+  if(!snap.exists){
+    showMsg("No cloud timetable found yet. Create a draft and Publish.", "warn");
+    return;
+  }
+  const norm = normalizeDocData(snap.data());
+  const dataStr = (norm.draftData || norm.publishedData);
+  if(!dataStr){
+    showMsg("No cloud timetable found yet. Create a draft and Publish.", "warn");
+    return;
+  }
+  const payload = JSON.parse(dataStr);
+
+  publishedVersion = norm.publishedVersion;
+  changeMap = {}; // draft editing should not inherit highlight state
+  deletedChanges = [];
+  updateVersionUI();
+
+  applyPayload(payload);
+
+  showMsg(norm.draftData ? "Loaded draft (unpublished)." : `Loaded published v${publishedVersion}.`, "ok");
+}
+
 
 function setAdminMode(state, userEmail){
   isAdmin = !!state;
@@ -848,7 +1003,8 @@ function setAdminMode(state, userEmail){
 
   $("loginBtn").classList.toggle("hidden", isAdmin);
   $("logoutBtn").classList.toggle("hidden", !isAdmin);
-  $("cloudSaveBtn").classList.toggle("hidden", !isAdmin);
+  $("draftSaveBtn").classList.toggle("hidden", !isAdmin);
+  $("publishBtn").classList.toggle("hidden", !isAdmin);
 
   // Hide the whole editor panel for viewers
   $("editorCard").classList.toggle("hidden", !isAdmin);
@@ -888,8 +1044,8 @@ async function initFirebase(){
       const ok = !!user && email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
       setAdminMode(ok, email);
 
-      // Always load latest on first auth state resolution
-      try{ await cloudLoadPayload(); } catch(e){ /* handled by cloudLoadPayload */ }
+      // On auth resolve: admin loads draft (or published), viewer loads published
+      try{ await (ok ? cloudLoadDraftOrPublished() : cloudLoadPublished()); } catch(e){ /* handled by load */ }
     });
   } catch(e){
     firebaseReady = false;
@@ -1052,9 +1208,12 @@ async function initFirebase(){
           const c = p.c;
 
           const block = document.createElement("div");
+          const ch = (!isAdmin && changeMap && changeMap[c.id]) ? changeMap[c.id] : null;
           block.className = "block"
             + (conflictIds.has(c.id) ? " conflict" : "")
-            + (c.id === selectedId ? " selected" : "");
+            + (c.id === selectedId ? " selected" : "")
+            + (ch && ch.type === "added" ? " added" : "")
+            + (ch && ch.type === "updated" ? " updated" : "");
           block.draggable = isAdmin;
           block.style.pointerEvents = "auto";
 
@@ -1125,8 +1284,9 @@ $("logoutBtn").addEventListener("click", async ()=>{
   try{ await firebase.auth().signOut(); } catch(e){}
 });
 
-$("cloudSaveBtn").addEventListener("click", ()=>{ cloudSavePayload().catch(()=>showMsg("Cloud save failed.", "bad")); });
-$("cloudLoadBtn").addEventListener("click", ()=>{ cloudLoadPayload().catch(()=>showMsg("Cloud load failed.", "bad")); });
+$("draftSaveBtn").addEventListener("click", ()=>{ cloudSaveDraftPayload().catch(()=>showMsg("Draft save failed.", "bad")); });
+$("publishBtn").addEventListener("click", ()=>{ cloudPublishDraft().catch(()=>showMsg("Publish failed.", "bad")); });
+$("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPublished() : cloudLoadPublished()).catch(()=>showMsg("Reload failed.", "bad")); });
 
   buildBoundaryOptions(dayStartEl, 6*60, 12*60, 30);
   buildBoundaryOptions(dayEndEl, 14*60, 22*60, 30);
@@ -1324,6 +1484,8 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ cloudLoadPayload().catch(()=>s
   /* Initial */
   setAdminMode(false);
   initFirebase();
+  // If not logged in (viewer), try to load published after init.
+  setTimeout(()=>{ if(firebaseReady && !isAdmin) cloudLoadPublished().catch(()=>{}); }, 800);
   clearEditor();
   render();
 </script>
