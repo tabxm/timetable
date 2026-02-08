@@ -313,6 +313,24 @@
       :root{ --slotW: 56px; --labelW: 104px; }
     }
 
+
+    /* Wider desktop layout so Admin mode doesn't leave large empty margins */
+    .appShell, .container, .wrap, .page, .rootWrap{
+      max-width: 1600px !important;
+      width: min(1600px, calc(100vw - 24px)) !important;
+    }
+    @media (min-width:1100px){
+      .mainGrid, .layoutGrid, .contentGrid, .twoCol{
+        grid-template-columns: clamp(320px, 28vw, 460px) 1fr !important;
+        gap: 16px !important;
+      }
+    }
+    @media (min-width:1400px){
+      .mainGrid, .layoutGrid, .contentGrid, .twoCol{
+        grid-template-columns: clamp(360px, 26vw, 520px) 1fr !important;
+      }
+    }
+
 </style>
 </head>
 
