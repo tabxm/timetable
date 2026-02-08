@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>University Timetable Maker (Timeline)</title>
+  <title>University Timetable (IT)</title>
 
   <style>
     :root{
@@ -313,24 +313,6 @@
       :root{ --slotW: 56px; --labelW: 104px; }
     }
 
-
-    /* Wider desktop layout so Admin mode doesn't leave large empty margins */
-    .appShell, .container, .wrap, .page, .rootWrap{
-      max-width: 1600px !important;
-      width: min(1600px, calc(100vw - 24px)) !important;
-    }
-    @media (min-width:1100px){
-      .mainGrid, .layoutGrid, .contentGrid, .twoCol{
-        grid-template-columns: clamp(320px, 28vw, 460px) 1fr !important;
-        gap: 16px !important;
-      }
-    }
-    @media (min-width:1400px){
-      .mainGrid, .layoutGrid, .contentGrid, .twoCol{
-        grid-template-columns: clamp(360px, 26vw, 520px) 1fr !important;
-      }
-    }
-
 </style>
 </head>
 
@@ -339,8 +321,8 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between;">
       <div class="row">
-        <h1>University Timetable Maker (Timeline)</h1>
-        <span class="pill">Click class to load editor, overlaps are stacked</span>
+        <h1>University Timetable (IT)</h1>
+        <span class="pill" id="verPill">v1</span>
       </div>
       <div class="row topControls" style="gap:8px">
         <span class="pill" id="authPill">Mode: Viewer</span>
@@ -361,7 +343,6 @@
         </div>
 <button id="loginBtn" style="width:auto;padding:8px 10px;border-radius:12px">Admin login</button>
 <button id="logoutBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Logout</button>
-<span class="pill" id="verPill">v1</span>
 <button id="draftSaveBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Save draft</button>
 <button id="publishBtn" class="hidden btnPrimary" style="width:auto;padding:8px 10px;border-radius:12px">Publish</button>
 <button id="cloudLoadBtn" style="width:auto;padding:8px 10px;border-radius:12px">Reload</button>
