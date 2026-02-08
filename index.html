@@ -73,7 +73,7 @@
     .hr{height:1px;background:rgba(42,55,102,0.65);margin:10px 0}
 
     /* Timeline view */
-    .timelineWrap{overflow-y:auto; overflow-x:hidden;max-width:100%;-webkit-overflow-scrolling:touch}
+    .timelineWrap{overflow:auto;max-width:100%;-webkit-overflow-scrolling:touch}
     .rowPanel{
       border:1px solid rgba(42,55,102,0.9);
       border-radius:14px;
@@ -313,21 +313,6 @@
       :root{ --slotW: 56px; --labelW: 104px; }
     }
 
-
-    /* Fit-to-screen mode: prevent horizontal scrolling, compress slot cells */
-    .timelineWrap{overflow-x:hidden}
-    .timeHeader, .laneGrid{max-width:100%}
-    .timeHeaderRow{overflow:hidden}
-    .timeHeadCell{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-
-    @media (max-width:900px){
-      .timeHeadCell{font-size:9px}
-    }
-    @media (max-width:600px){
-      .timeHeadCell{font-size:8px}
-      .classCard .meta{font-size:10px}
-    }
-
 </style>
 </head>
 
@@ -531,80 +516,9 @@
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js">
-    // Fit timeline horizontally into available width (no horizontal scroll)
-    function applyFitToScreenSlotWidth(slotCount){
-      try{
-        const wrap = document.querySelector('.timelineWrap');
-        if(!wrap) return;
-        // Available width is the wrap client width minus label column and padding.
-        const styles = getComputedStyle(document.documentElement);
-        const labelW = parseFloat(styles.getPropertyValue('--labelW')) || 140;
-        const pad = 24; // safety margin
-        const avail = Math.max(320, wrap.clientWidth - labelW - pad);
-        // Compute slot width, clamp to keep usable minimum
-        const raw = Math.floor(avail / Math.max(1, slotCount));
-        const slotW = Math.max(36, Math.min(92, raw)); // 36..92 px
-        document.documentElement.style.setProperty('--slotW', slotW + 'px');
-      }catch(e){}
-    }
-
-
-
-    // Recompute slot width on resize (keeps timeline fit-to-screen)
-    const __fitObserver = new ResizeObserver(() => {
-      // slots count depends on current view start/end/slot size, so recompute using current UI state
-      try{
-        const slotCount = (window.__lastSlotsCount || 0);
-        if(slotCount) applyFitToScreenSlotWidth(slotCount);
-      }catch(e){}
-    });
-    window.addEventListener('load', () => {
-      const wrap = document.querySelector('.timelineWrap');
-      if(wrap) __fitObserver.observe(wrap);
-    });
-
-</script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js">
-    // Fit timeline horizontally into available width (no horizontal scroll)
-    function applyFitToScreenSlotWidth(slotCount){
-      try{
-        const wrap = document.querySelector('.timelineWrap');
-        if(!wrap) return;
-        // Available width is the wrap client width minus label column and padding.
-        const styles = getComputedStyle(document.documentElement);
-        const labelW = parseFloat(styles.getPropertyValue('--labelW')) || 140;
-        const pad = 24; // safety margin
-        const avail = Math.max(320, wrap.clientWidth - labelW - pad);
-        // Compute slot width, clamp to keep usable minimum
-        const raw = Math.floor(avail / Math.max(1, slotCount));
-        const slotW = Math.max(36, Math.min(92, raw)); // 36..92 px
-        document.documentElement.style.setProperty('--slotW', slotW + 'px');
-      }catch(e){}
-    }
-
-
-</script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
-    // Fit timeline horizontally into available width (no horizontal scroll)
-    function applyFitToScreenSlotWidth(slotCount){
-      try{
-        const wrap = document.querySelector('.timelineWrap');
-        if(!wrap) return;
-        // Available width is the wrap client width minus label column and padding.
-        const styles = getComputedStyle(document.documentElement);
-        const labelW = parseFloat(styles.getPropertyValue('--labelW')) || 140;
-        const pad = 24; // safety margin
-        const avail = Math.max(320, wrap.clientWidth - labelW - pad);
-        // Compute slot width, clamp to keep usable minimum
-        const raw = Math.floor(avail / Math.max(1, slotCount));
-        const slotW = Math.max(36, Math.min(92, raw)); // 36..92 px
-        document.documentElement.style.setProperty('--slotW', slotW + 'px');
-      }catch(e){}
-    }
-
-
-</script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
 <script>
   const days = ["Mon","Tue","Wed","Thu","Fri"];
@@ -1604,25 +1518,6 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
   setTimeout(()=>{ if(firebaseReady && !isAdmin) cloudLoadPublished().catch(()=>{}); }, 800);
   clearEditor();
   render();
-
-    // Fit timeline horizontally into available width (no horizontal scroll)
-    function applyFitToScreenSlotWidth(slotCount){
-      try{
-        const wrap = document.querySelector('.timelineWrap');
-        if(!wrap) return;
-        // Available width is the wrap client width minus label column and padding.
-        const styles = getComputedStyle(document.documentElement);
-        const labelW = parseFloat(styles.getPropertyValue('--labelW')) || 140;
-        const pad = 24; // safety margin
-        const avail = Math.max(320, wrap.clientWidth - labelW - pad);
-        // Compute slot width, clamp to keep usable minimum
-        const raw = Math.floor(avail / Math.max(1, slotCount));
-        const slotW = Math.max(36, Math.min(92, raw)); // 36..92 px
-        document.documentElement.style.setProperty('--slotW', slotW + 'px');
-      }catch(e){}
-    }
-
-
 </script>
 </body>
 </html>
