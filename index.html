@@ -7,6 +7,8 @@
 
   <style>
     :root{
+      --slotW: 92px;
+      --labelW: 140px;
       --bg:#0b1020;
       --text:#e9eefc;
       --muted:#a9b4d6;
@@ -71,14 +73,14 @@
     .hr{height:1px;background:rgba(42,55,102,0.65);margin:10px 0}
 
     /* Timeline view */
-    .timelineWrap{overflow:auto}
+    .timelineWrap{overflow:auto;max-width:100%;-webkit-overflow-scrolling:touch}
     .rowPanel{
       border:1px solid rgba(42,55,102,0.9);
       border-radius:14px;
       background:rgba(10,14,30,0.35);
       padding:10px;
       margin-bottom:12px;
-      min-width:1120px;
+      min-width:0;
     }
     .rowPanelHead{
       display:flex;justify-content:space-between;align-items:center;
@@ -289,6 +291,26 @@
     @media (max-width:900px){
       .layout{grid-template-columns:1fr}
       header .row{align-items:flex-start}
+    }
+
+
+
+    /* Responsive timeline sizing */
+    .rowPanel{width:100%}
+    .rowPanelHead{flex-wrap:wrap}
+    .timeHeader, .laneGrid{min-width:0}
+
+    @media (max-width:900px){
+      :root{ --slotW: 78px; --labelW: 120px; }
+      .rowKey{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+    }
+    @media (max-width:600px){
+      :root{ --slotW: 64px; --labelW: 110px; }
+      .timeHeadCell{font-size:9px; padding:5px 3px}
+      .dayLabel{font-size:11px; padding:10px 8px}
+    }
+    @media (max-width:420px){
+      :root{ --slotW: 56px; --labelW: 104px; }
     }
 
 </style>
@@ -1060,7 +1082,7 @@ async function initFirebase(){
     const allRows = getRowsForMode(rowMode);
     const rows = (rowFilter && rowFilter !== "__all__") ? [rowFilter] : allRows;
     const slots = timeSlots();
-    const gridTemplate = `140px repeat(${slots.length}, minmax(86px, 1fr))`;
+    const gridTemplate = `var(--labelW) repeat(${slots.length}, var(--slotW))`;
 
     const confAll = computeConflictsAll();
     const total = confAll.room.length + confAll.instructor.length + confAll.section.length;
@@ -1150,7 +1172,7 @@ async function initFirebase(){
 
         const bg = document.createElement("div");
         bg.className = "bgTicks";
-        bg.style.gridTemplateColumns = `repeat(${slots.length}, 1fr)`;
+        bg.style.gridTemplateColumns = `repeat(${slots.length}, var(--slotW))`;
         for(let i=0;i<slots.length;i++) bg.appendChild(document.createElement("div"));
         lane.appendChild(bg);
 
@@ -1191,7 +1213,7 @@ async function initFirebase(){
         laneInner.style.position = "absolute";
         laneInner.style.inset = "10px";
         laneInner.style.display = "grid";
-        laneInner.style.gridTemplateColumns = `repeat(${slots.length}, 1fr)`;
+        laneInner.style.gridTemplateColumns = `repeat(${slots.length}, var(--slotW))`;
         laneInner.style.gridTemplateRows = `repeat(${levelCount}, minmax(150px, auto))`;
         laneInner.style.gap = "10px";
         laneInner.style.pointerEvents = "none";
