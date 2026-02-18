@@ -313,6 +313,29 @@
       :root{ --slotW: 56px; --labelW: 104px; }
     }
 
+
+    /* Ramadan toggle + compact grid when many columns */
+    .btnToggle{
+      width:auto;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(42,55,102,0.9);
+      background:rgba(12,18,40,0.85);
+      color:var(--text);
+      cursor:pointer;
+    }
+    .btnToggle.on{
+      background:linear-gradient(180deg,#2e4bff,#2640d8);
+      border-color:rgba(123,149,255,0.9);
+    }
+    body.ramadanMode{
+      --slotW: 44px;
+      --labelW: 130px;
+    }
+    @media (max-width:600px){
+      body.ramadanMode{ --slotW: 36px; --labelW: 110px; }
+    }
+
 </style>
 </head>
 
@@ -346,6 +369,7 @@
 <button id="draftSaveBtn" class="hidden" style="width:auto;padding:8px 10px;border-radius:12px">Save draft</button>
 <button id="publishBtn" class="hidden btnPrimary" style="width:auto;padding:8px 10px;border-radius:12px">Publish</button>
 <button id="cloudLoadBtn" style="width:auto;padding:8px 10px;border-radius:12px">Reload</button>
+        <button id="ramadanToggleBtn" class="btnToggle" style="width:auto">Ramadan: Off</button>
         <span class="pill" id="confStat">Conflicts: 0</span>
         <button id="confBtn" style="width:auto;padding:8px 10px;border-radius:12px">View conflicts</button>
       </div>
@@ -574,6 +598,120 @@ function hasPlaceholders(cfg){
   let endMin = 17*60+30;
   let slotSize = 30;
 
+  // Schedule mode toggle (Regular vs Ramadan)
+  let isRamadan = false;
+  let regularSnapshot = null;
+
+  function allowedStartMinsForDay(day){
+    if(!isRamadan) return null;
+    if(day === "Fri") return [480,520,560,600,640,680]; // 08:00, 08:40, ..., 11:20
+    return [480,535,590,645,700,755]; // 08:00, 08:55, ..., 12:35
+  }
+
+  function setDurOptionsForDay(day){
+    const cur = String(durEl?.value || "");
+    let opts;
+    if(!isRamadan){
+      opts = ["60","90","120","180"];
+    } else if(day === "Fri"){
+      opts = ["25","40","50","80"];
+    } else {
+      opts = ["35","55","70","110"];
+    }
+    if(!durEl) return;
+    durEl.innerHTML = "";
+    for(const v of opts){
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      durEl.appendChild(o);
+    }
+    if(cur && !opts.includes(cur)){
+      const o = document.createElement("option");
+      o.value = cur;
+      o.textContent = cur;
+      durEl.appendChild(o);
+    }
+    if(cur) durEl.value = cur;
+  }
+
+  function buildStartOptionsForDay(day){
+    if(!startEl) return;
+    if(!isRamadan){
+      buildStartOptionsForDay(dayEl.value);
+      return;
+    }
+    const mins = allowedStartMinsForDay(day) || [];
+    startEl.innerHTML = "";
+    for(const t of mins){
+      if(t < startMin || t > endMin) continue;
+      const opt = document.createElement("option");
+      opt.value = fromMin24(t);
+      opt.textContent = fromMin12(t);
+      startEl.appendChild(opt);
+    }
+    if(!startEl.options.length){
+      buildStartOptionsForDay(dayEl.value);
+      setDurOptionsForDay(dayEl.value);
+    }
+  }
+
+  function snapMinToAllowed(mins, day){
+    const allowed = allowedStartMinsForDay(day);
+    if(!allowed || !allowed.length) return snapMinToSlot(mins);
+    let best = allowed[0];
+    let bestD = Math.abs(mins - best);
+    for(const a of allowed){
+      const d = Math.abs(mins - a);
+      if(d < bestD){ bestD = d; best = a; }
+    }
+    return Math.max(startMin, Math.min(endMin, best));
+  }
+
+  function setRamadanMode(on, silent=false){
+    isRamadan = !!on;
+    document.body.classList.toggle("ramadanMode", isRamadan);
+
+    const btn = $("ramadanToggleBtn");
+    if(btn){
+      btn.textContent = isRamadan ? "Ramadan: On" : "Ramadan: Off";
+      btn.classList.toggle("on", isRamadan);
+      btn.setAttribute("aria-pressed", isRamadan ? "true" : "false");
+    }
+
+    const timeCtrls = [dayStartEl, dayEndEl, slotSizeEl];
+    timeCtrls.forEach(el=>{
+      if(!el) return;
+      el.disabled = isRamadan;
+      el.classList.toggle("disabled", isRamadan);
+    });
+
+    if(isRamadan){
+      if(!regularSnapshot) regularSnapshot = { startMin, endMin, slotSize };
+      startMin = 8*60;          // 08:00
+      endMin   = 13*60 + 30;    // 13:30
+      slotSize = 5;             // fine grid for 55/40 minute blocks
+    } else if(regularSnapshot){
+      startMin = Number(regularSnapshot.startMin);
+      endMin   = Number(regularSnapshot.endMin);
+      slotSize = Number(regularSnapshot.slotSize);
+      regularSnapshot = null;
+    }
+
+    if(dayStartEl) dayStartEl.value = fromMin24(startMin);
+    if(dayEndEl) dayEndEl.value = fromMin24(endMin);
+    if(slotSizeEl) slotSizeEl.value = String(slotSize);
+
+    buildStartOptionsForDay(dayEl?.value || "Mon");
+    setDurOptionsForDay(dayEl?.value || "Mon");
+    if(startEl && !startEl.value) startEl.value = fromMin24(startMin);
+
+    if(!silent){
+      render();
+      queueAutoSave();
+    }
+  }
+
   const courseEl=$("course"), sectionEl=$("section"), instructorEl=$("instructor"),
         roomEl=$("room"), dayEl=$("day"), startEl=$("start"), durEl=$("dur"),
         notesEl=$("notes"), msgEl=$("msg"), gridRoot=$("gridRoot"),
@@ -617,7 +755,7 @@ function hasPlaceholders(cfg){
   function clearEditor(){
     courseEl.value=""; sectionEl.value=""; instructorEl.value="";
     roomEl.value=""; dayEl.value="Mon"; startEl.value=fromMin24(startMin);
-    durEl.value="60"; notesEl.value="";
+    durEl.value = isRamadan ? (dayEl.value==="Fri" ? "40" : "55") : "60"; notesEl.value="";
     selectedId = "";
     selInfoEl.textContent = "";
   }
@@ -628,8 +766,10 @@ function hasPlaceholders(cfg){
     instructorEl.value = c.instructor || "";
     roomEl.value = c.room || "";
     dayEl.value = c.day || "Mon";
+    buildStartOptionsForDay(dayEl.value);
+    setDurOptionsForDay(dayEl.value);
     startEl.value = c.start || fromMin24(startMin);
-    durEl.value = String(c.dur || 60);
+    durEl.value = String(c.dur || (isRamadan ? (dayEl.value==="Fri" ? 40 : 55) : 60));
     notesEl.value = c.notes || "";
     selectedId = c.id;
     selInfoEl.textContent = `Selected: ${c.course || "-"} (${to12h(c.start)}), ID: ${c.id}`;
@@ -815,7 +955,7 @@ function hasPlaceholders(cfg){
   }
 
   function makePayload(){
-    return { version:2, rowMode, rowsByMode: userRowsByMode, startMin, endMin, slotSize, classes };
+    return { version:2, scheduleMode: (isRamadan ? "ramadan" : "regular"), rowMode, rowsByMode: userRowsByMode, startMin, endMin, slotSize, classes };
   }
 
 
@@ -826,6 +966,13 @@ function applyPayload(payload){
   startMin = Number(payload.startMin ?? startMin);
   endMin = Number(payload.endMin ?? endMin);
   slotSize = Number(payload.slotSize ?? slotSize);
+
+  // Schedule mode (backward compatible)
+  if(payload.scheduleMode === "ramadan"){
+    setRamadanMode(true, true);
+  } else {
+    setRamadanMode(false, true);
+  }
 
   if (payload.rowsByMode && typeof payload.rowsByMode === "object") {
     userRowsByMode.room = payload.rowsByMode.room || null;
@@ -838,7 +985,8 @@ function applyPayload(payload){
   dayEndEl.value = fromMin24(endMin);
   slotSizeEl.value = String(slotSize);
 
-  buildTimeOptions(startEl, startMin, endMin, slotSize);
+  buildStartOptionsForDay(dayEl.value);
+  setDurOptionsForDay(dayEl.value);
   clearEditor();
   render();
 }
@@ -1148,7 +1296,11 @@ async function initFirebase(){
       for(const t of slots){
         const c = document.createElement("div");
         c.className = "timeHeadCell";
-        c.textContent = fromMin12(t);
+        if(isRamadan && slotSize <= 5){
+          c.textContent = (t === startMin || (t % 30 === 0)) ? fromMin12(t) : "";
+        } else {
+          c.textContent = fromMin12(t);
+        }
         header.appendChild(c);
       }
       panel.appendChild(header);
@@ -1196,7 +1348,7 @@ async function initFirebase(){
 
           const totalSpanMin = (endMin - startMin);
           const rawMin = startMin + frac * totalSpanMin;
-          const newStart = snapMinToSlot(rawMin);
+          const newStart = isRamadan ? snapMinToAllowed(rawMin, d) : snapMinToSlot(rawMin);
 
           cls.day = d;
           cls[keyField] = rowKey;
@@ -1318,11 +1470,26 @@ $("draftSaveBtn").addEventListener("click", ()=>{ cloudSaveDraftPayload().catch(
 $("publishBtn").addEventListener("click", ()=>{ cloudPublishDraft().catch(()=>showMsg("Publish failed.", "bad")); });
 $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPublished() : cloudLoadPublished()).catch(()=>showMsg("Reload failed.", "bad")); });
 
+  $("ramadanToggleBtn").addEventListener("click", ()=>{
+    setRamadanMode(!isRamadan);
+  });
+
   buildBoundaryOptions(dayStartEl, 6*60, 12*60, 30);
-  buildBoundaryOptions(dayEndEl, 14*60, 22*60, 30);
+  buildBoundaryOptions(dayEndEl, 13*60+30, 22*60, 30);
   dayStartEl.value = fromMin24(startMin);
   dayEndEl.value = fromMin24(endMin);
-  buildTimeOptions(startEl, startMin, endMin, slotSize);
+  buildStartOptionsForDay(dayEl.value);
+  setDurOptionsForDay(dayEl.value);
+
+
+  dayEl.addEventListener("change", ()=>{
+    buildStartOptionsForDay(dayEl.value);
+    setDurOptionsForDay(dayEl.value);
+    if(isRamadan){
+      const cur = toMin(startEl.value || fromMin24(startMin));
+      startEl.value = fromMin24(snapMinToAllowed(cur, dayEl.value));
+    }
+  });
 
   $("newBtn").addEventListener("click", ()=>{
     clearEditor();
@@ -1423,7 +1590,7 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
 
   slotSizeEl.addEventListener("change", ()=>{
     slotSize = Number(slotSizeEl.value);
-    buildTimeOptions(startEl, startMin, endMin, slotSize);
+    buildStartOptionsForDay(dayEl.value);
     startEl.value = fromMin24(startMin);
     render();
     queueAutoSave();
@@ -1431,7 +1598,7 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
 
   dayStartEl.addEventListener("change", ()=>{
     startMin = toMin(dayStartEl.value);
-    buildTimeOptions(startEl, startMin, endMin, slotSize);
+    buildStartOptionsForDay(dayEl.value);
     startEl.value = fromMin24(startMin);
     render();
     queueAutoSave();
@@ -1439,7 +1606,7 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
 
   dayEndEl.addEventListener("change", ()=>{
     endMin = toMin(dayEndEl.value);
-    buildTimeOptions(startEl, startMin, endMin, slotSize);
+    buildStartOptionsForDay(dayEl.value);
     startEl.value = fromMin24(startMin);
     render();
     queueAutoSave();
@@ -1477,6 +1644,12 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
       endMin = Number(payload.endMin ?? endMin);
       slotSize = Number(payload.slotSize ?? slotSize);
 
+      if(payload.scheduleMode === "ramadan"){
+        setRamadanMode(true, true);
+      } else {
+        setRamadanMode(false, true);
+      }
+
       if (payload.rowsByMode && typeof payload.rowsByMode === "object") {
         userRowsByMode.room = payload.rowsByMode.room || null;
         userRowsByMode.section = payload.rowsByMode.section || null;
@@ -1488,7 +1661,8 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
       dayEndEl.value = fromMin24(endMin);
       slotSizeEl.value = String(slotSize);
 
-      buildTimeOptions(startEl, startMin, endMin, slotSize);
+      buildStartOptionsForDay(dayEl.value);
+      setDurOptionsForDay(dayEl.value);
 
       clearEditor();
       showMsg("Imported successfully.", "ok");
@@ -1516,6 +1690,7 @@ $("cloudLoadBtn").addEventListener("click", ()=>{ (isAdmin ? cloudLoadDraftOrPub
   initFirebase();
   // If not logged in (viewer), try to load published after init.
   setTimeout(()=>{ if(firebaseReady && !isAdmin) cloudLoadPublished().catch(()=>{}); }, 800);
+  setRamadanMode(false, true);
   clearEditor();
   render();
 </script>
