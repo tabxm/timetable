@@ -1069,7 +1069,7 @@ function updateVersionUI(){
 }
 
 async function cloudSaveDraftPayload(){
-  if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  if(!firebaseReady) { showMsg("Firebase is not ready. Check internet, authorized domain, and FIREBASE_CONFIG.", "warn"); return; }
   if(!isAdmin) { showMsg("View-only. Admin login required to save.", "warn"); return; }
 
   const payload = makePayload();
@@ -1082,7 +1082,7 @@ async function cloudSaveDraftPayload(){
 }
 
 async function cloudPublishDraft(){
-  if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  if(!firebaseReady) { showMsg("Firebase is not ready. Check internet, authorized domain, and FIREBASE_CONFIG.", "warn"); return; }
   if(!isAdmin) { showMsg("View-only. Admin login required to publish.", "warn"); return; }
 
   const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
@@ -1114,7 +1114,7 @@ async function cloudPublishDraft(){
 }
 
 async function cloudLoadPublished(){
-  if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  if(!firebaseReady) { showMsg("Firebase is not ready. Check internet, authorized domain, and FIREBASE_CONFIG.", "warn"); return; }
   const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
   const snap = await docRef.get();
   if(!snap.exists){
@@ -1139,7 +1139,7 @@ async function cloudLoadPublished(){
 }
 
 async function cloudLoadDraftOrPublished(){
-  if(!firebaseReady) { showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  if(!firebaseReady) { showMsg("Firebase is not ready. Check internet, authorized domain, and FIREBASE_CONFIG.", "warn"); return; }
   const docRef = firebase.firestore().doc(CLOUD_DOC_PATH);
   const snap = await docRef.get();
   if(!snap.exists){
@@ -1198,6 +1198,14 @@ function setAdminMode(state, userEmail){
 }
 
 async function initFirebase(){
+  // If firebase scripts could not load (offline, blocked, or opened in a restricted context)
+  if(typeof firebase === "undefined"){
+    firebaseReady = false;
+    showMsg("Firebase libraries did not load. Check internet access, and open this file via http(s) (for example http://localhost) rather than file://.", "warn");
+    setAdminMode(false);
+    return;
+  }
+
   if(hasPlaceholders(FIREBASE_CONFIG)){
     firebaseReady = false;
     showMsg("Firebase placeholders detected. Paste your firebaseConfig values and admin email.", "warn");
@@ -1452,7 +1460,7 @@ for(const p of placed){
 
 // Cloud controls
 $("loginBtn").addEventListener("click", async ()=>{
-  if(!firebaseReady){ showMsg("Firebase not configured. Update FIREBASE_CONFIG placeholders.", "warn"); return; }
+  if(!firebaseReady){ showMsg("Firebase is not ready. Check internet, authorized domain, and FIREBASE_CONFIG.", "warn"); return; }
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
     await firebase.auth().signInWithPopup(provider);
