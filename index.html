@@ -637,12 +637,22 @@ function hasPlaceholders(cfg){
 
   function buildStartOptionsForDay(day){
     if(!startEl) return;
+    startEl.innerHTML = "";
+
+    // Regular mode: build options using the current grid step.
     if(!isRamadan){
-      buildStartOptionsForDay(dayEl.value);
+      const step = Math.max(1, Number(slotSize) || 5);
+      for(let t = startMin; t <= endMin; t += step){
+        const opt = document.createElement("option");
+        opt.value = fromMin24(t);
+        opt.textContent = fromMin12(t);
+        startEl.appendChild(opt);
+      }
       return;
     }
+
+    // Ramadan mode: only allow slot starts defined per day (Mon-Thu vs Fri).
     const mins = allowedStartMinsForDay(day) || [];
-    startEl.innerHTML = "";
     for(const t of mins){
       if(t < startMin || t > endMin) continue;
       const opt = document.createElement("option");
@@ -650,11 +660,8 @@ function hasPlaceholders(cfg){
       opt.textContent = fromMin12(t);
       startEl.appendChild(opt);
     }
-    if(!startEl.options.length){
-      buildStartOptionsForDay(dayEl.value);
-      setDurOptionsForDay(dayEl.value);
-    }
   }
+
 
   function snapMinToAllowed(mins, day){
     const allowed = allowedStartMinsForDay(day);
